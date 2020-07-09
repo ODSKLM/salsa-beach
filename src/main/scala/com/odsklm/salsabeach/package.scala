@@ -4,12 +4,11 @@ import java.time.Instant
 
 import com.odsklm.salsabeach.types.ColumnDefs._
 import com.odsklm.salsabeach.types.models.{ColumnsValueVersions, ColumnsValues, Value}
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client.{Result, Scan}
 import org.apache.hadoop.hbase.filter.{Filter, FilterList, PrefixFilter, SingleColumnValueFilter}
 import org.apache.hadoop.hbase.io.TimeRange
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{Cell, CellUtil, HBaseConfiguration}
+import org.apache.hadoop.hbase.{Cell, CellUtil}
 
 import scala.jdk.CollectionConverters._
 import scala.collection.SortedSet
@@ -40,26 +39,6 @@ package object salsabeach {
         scan.addColumn(scvf.getFamily, scvf.getQualifier)
       case _ =>
     }
-
-  /**
-    * Creates a HBase config
-    *
-    * @param zkServers   The Zookeeper servers
-    * @param port        The port on which Zookeeper is listening
-    * @param znodeParent The Zookeeper node parent location
-    * @return A Hadoop configuration object
-    */
-  private[salsabeach] def createHBaseConfig(
-      zkServers: Seq[String],
-      port: Int,
-      znodeParent: String
-    ): Configuration = {
-    val c = HBaseConfiguration.create()
-    c.set("hbase.zookeeper.property.clientPort", port.toString)
-    c.set("hbase.zookeeper.quorum", zkServers.mkString(","))
-    c.set("zookeeper.znode.parent", znodeParent)
-    c
-  }
 
   /**
     * Converts raw cell data from HBase to a Map of columns to sets of values
