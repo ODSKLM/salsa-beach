@@ -9,7 +9,7 @@ import org.apache.hadoop.hbase.client.{Delete, Table}
 object DeleteOps extends LazyLogging {
 
   /**
-    * Delete a single column for the given key/column from the table.
+    * Delete the latest version of a single column for the given key/column from the table.
     *
     * @param key    The row key
     * @param column The column to delete
@@ -19,7 +19,7 @@ object DeleteOps extends LazyLogging {
     delete(key, List(column))
 
   /**
-    * Delete a number of columns for the given key from the table.
+    * Delete the latest version of a number of columns for the given key from the table.
     *
     * @param key     The row key
     * @param columns The columns to delete
@@ -32,7 +32,7 @@ object DeleteOps extends LazyLogging {
   }
 
   /**
-    * Delete all columns for the given key and column family from the table.
+    * Delete all versions of all columns for the given key and column family from the table.
     *
     * @param key          The row key
     * @param columnFamily The column family of which to delete all columns
