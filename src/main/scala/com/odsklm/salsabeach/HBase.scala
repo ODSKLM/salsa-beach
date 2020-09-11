@@ -46,13 +46,6 @@ object HBase extends LazyLogging {
       c.set("hbase.master.kerberos.principal", kerberosConfig.masterPrincipal)
 
       UserGroupInformation.setConfiguration(c)
-
-      logger.info(s"Performing Kerberos login with principal ${kerberosConfig.principal} from keytab ${kerberosConfig.keyTab}")
-
-      UserGroupInformation.loginUserFromKeytab(
-        kerberosConfig.principal,
-        kerberosConfig.keyTab
-      )
     }
     c
   }
@@ -98,6 +91,16 @@ object HBase extends LazyLogging {
       kerberosConfig: Option[KerberosConfig]
     ): Connection = {
     val hBaseConf = createHBaseConfig(zkServers, port, znodeParent, kerberosConfig)
+
+    kerberosConfig.foreach { conf =>
+      logger.info(s"Performing Kerberos login with principal ${conf.principal} from keytab ${conf.keyTab}")
+
+      UserGroupInformation.loginUserFromKeytab(
+        conf.principal,
+        conf.keyTab
+      )
+    }
+
     ConnectionFactory.createConnection(hBaseConf)
   }
 
