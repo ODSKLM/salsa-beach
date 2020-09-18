@@ -4,10 +4,10 @@ import com.odsklm.salsabeach.types.ColumnDefs._
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.client.{Connection, ConnectionFactory, Table}
+import org.apache.hadoop.hbase.client.{Connection, Table, ConnectionFactory}
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.hadoop.hbase.{HBaseConfiguration, HColumnDescriptor, HTableDescriptor, TableName}
-
+import org.apache.hadoop.hbase.{TableName, HColumnDescriptor, HBaseConfiguration, HTableDescriptor}
+import org.apache.hadoop.security.UserGroupInformation
 import scala.jdk.CollectionConverters._
 
 object HBase extends LazyLogging {
@@ -44,6 +44,8 @@ object HBase extends LazyLogging {
       c.set("hadoop.security.authentication", "kerberos")
       c.set("hbase.regionserver.kerberos.principal", kerberosConfig.regionServerPrincipal)
       c.set("hbase.master.kerberos.principal", kerberosConfig.masterPrincipal)
+
+      UserGroupInformation.setConfiguration(c)
     }
     c
   }
@@ -89,6 +91,16 @@ object HBase extends LazyLogging {
       kerberosConfig: Option[KerberosConfig]
     ): Connection = {
     val hBaseConf = createHBaseConfig(zkServers, port, znodeParent, kerberosConfig)
+
+    kerberosConfig.foreach { conf =>
+      logger.info(s"Performing Kerberos login with principal ${conf.principal} from keytab ${conf.keyTab}")
+
+      UserGroupInformation.loginUserFromKeytab(
+        conf.principal,
+        conf.keyTab
+      )
+    }
+
     ConnectionFactory.createConnection(hBaseConf)
   }
 
