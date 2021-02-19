@@ -1,9 +1,9 @@
 package com.odsklm.salsabeach.types.models
 
-import java.time.Instant
-
 import com.odsklm.salsabeach.types.ColumnDefs.FullColumn
-import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder
+import com.odsklm.salsabeach.types.rowconverters.RowKeyDecoder
+
+import java.time.Instant
 
 /**
   * A representation of an HBase Row, containing the rowKey and the row's column values.
@@ -12,7 +12,7 @@ import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder
   * @param columnsValueVersions the row's column values
   * @tparam A type of the rowKey
   */
-case class VersionedRow[A: RowQueryEncoder](rowKey: A, columnsValueVersions: ColumnsValueVersions) {
+case class VersionedRow[A: RowKeyDecoder](rowKey: A, columnsValueVersions: ColumnsValueVersions) {
 
   /**
     * Return the latest version of the value of a column at or before the timestamp
@@ -37,11 +37,13 @@ case class VersionedRow[A: RowQueryEncoder](rowKey: A, columnsValueVersions: Col
     * @return Row with latest values
     */
   def getLatestRow: Row[A] = {
-    val columnsValues = columnsValueVersions.map {
-      case (column, _) => (column, getLatestValue(column))
-    }.collect {
-      case (column, Some(value)) => (column, value)
-    }
+    val columnsValues = columnsValueVersions
+      .map {
+        case (column, _) => (column, getLatestValue(column))
+      }
+      .collect {
+        case (column, Some(value)) => (column, value)
+      }
     Row(rowKey, columnsValues)
   }
 
@@ -52,11 +54,13 @@ case class VersionedRow[A: RowQueryEncoder](rowKey: A, columnsValueVersions: Col
     * @return Row with values at a certain moment in time
     */
   def getRowAt(timestamp: Instant): Row[A] = {
-    val columnsValues = columnsValueVersions.map {
-      case (column, _) => (column, getValueAt(column, timestamp))
-    }.collect {
-      case (column, Some(value)) => (column, value)
-    }
+    val columnsValues = columnsValueVersions
+      .map {
+        case (column, _) => (column, getValueAt(column, timestamp))
+      }
+      .collect {
+        case (column, Some(value)) => (column, value)
+      }
     Row(rowKey, columnsValues)
   }
 }

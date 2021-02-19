@@ -1,17 +1,14 @@
 package com.odsklm.salsabeach
 
-import java.time.Instant
-
 import com.odsklm.salsabeach.types.ColumnDefs._
-import com.odsklm.salsabeach.types.models.Row
-import com.odsklm.salsabeach.types.rowconverters
+import com.odsklm.salsabeach.types.models.{Row, VersionedRow}
+import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder.ops._
 import com.odsklm.salsabeach.types.rowconverters.{RowKeyDecoder, RowQueryEncoder}
 import com.typesafe.scalalogging.LazyLogging
-import org.apache.hadoop.hbase.client.{ResultScanner, Scan, Table}
+import org.apache.hadoop.hbase.client.{Scan, Table}
 import org.apache.hadoop.hbase.filter.Filter
-import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder.ops._
-import org.apache.hadoop.hbase.util.Bytes
 
+import java.time.Instant
 import scala.jdk.CollectionConverters._
 
 // TODO: Make scan operations return a Mapping instead of List of Rows?
@@ -173,6 +170,37 @@ object ScanOps extends LazyLogging {
   }
 
   /**
+    * Get multiple versions of columns for rows with a given row prefix
+    *
+    * @param rowKeyPrefix   The prefix of the rows to scan
+    * @param columns        A sequence of columns incl. column family
+    * @param versions       The maximum number of versions to return, defaults to all
+    * @param minTimestamp   Minimum timestamp to retrieve versions for, inclusive. Default: 0L
+    * @param maxTimestamp   Maximum timestamp to retrieve version for, exclusive. Default: Long.MAX_VALUE
+    * @param table          (implicit) The table to read from
+    * @tparam P             Type of row key prefix for which `RowQueryEncoder` needs to exist
+    * @tparam K             Type of row key for which `RowKeyDecoder` needs to exist
+    * @return               List of VersionedRows with each a row key and a mapping from column to values with their respective timestamps
+    */
+  def scanVersions[P: RowQueryEncoder, K: RowKeyDecoder](
+      rowKeyPrefix: P,
+      columns: Seq[FullColumn],
+      versions: Int = Int.MaxValue,
+      minTimestamp: Option[Instant] = None,
+      maxTimestamp: Option[Instant] = None
+    )(implicit table: Table
+    ): List[VersionedRow[K]] = {
+    val scan = createRowPrefixScan(
+      rowKeyPrefix = Some(rowKeyPrefix),
+      columns = columns,
+      minTimestamp = minTimestamp,
+      maxTimestamp = maxTimestamp,
+      versions = versions
+    )
+    executeVersioned(scan, columns)
+  }
+
+  /**
     * Create HBase Scan object to be executed against a table at a later time
     *
     * @param columns      A sequence of columns to filter on incl. column family. Result will only contain values
@@ -258,6 +286,32 @@ object ScanOps extends LazyLogging {
       val rowKey = implicitly[RowKeyDecoder[K]].decode(result.getRow)
       val columnsValues = convertCellsToColumnsWithValues(result, columns)
       Row(rowKey, columnsValues)
+    }
+  }
+
+  /**
+    * Executes an HBase Scan operation with multiple versions of multiple columns to retrieve and returns a versioned
+    * row
+    * @param scan     HBase Scan operation
+    * @param columns  Columns to retrieve, needed for translating HBase Result back to Salsa Beach VersionedRow
+    * @param table    (implicit) The HBase table to read from
+    * @tparam K       Type of row key for which `RowKeyDecoder` needs to exist
+    * @return         VersionedRow object with columns and corresponding versioned values. If no value exists for
+    *                 column, that column and value versions are left out of the result.
+    *                 Use `VersionedRow.getLatestValue()` or `VersionedRow.getValueAt()` to safely retrieve a possibly
+    *                 non-existent value
+    */
+  def executeVersioned[K: RowKeyDecoder](
+      scan: Scan,
+      columns: Seq[FullColumn]
+    )(implicit table: Table
+    ): List[VersionedRow[K]] = {
+    val scanner = table.getScanner(scan)
+    val results = scanner.asScala.toList
+    results.map { result =>
+      val rowKey = implicitly[RowKeyDecoder[K]].decode(result.getRow)
+      val columnsValues = convertCellsToColumnsWithVersionedValues(result, columns)
+      VersionedRow(rowKey, columnsValues)
     }
   }
 

@@ -4,7 +4,7 @@ import java.time.Instant
 
 import com.odsklm.salsabeach.types.ColumnDefs.{Column, ColumnFamily}
 import com.odsklm.salsabeach.types.models.fixtures._
-import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder.instances.utf8StringRowKeyEncoder
+import com.odsklm.salsabeach.types.rowconverters.RowKeyDecoder.instances.utf8StringRowKeyDecoder
 import org.scalatest.OptionValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
