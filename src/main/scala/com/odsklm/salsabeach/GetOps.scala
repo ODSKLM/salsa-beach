@@ -1,10 +1,9 @@
 package com.odsklm.salsabeach
 
 import java.time.Instant
-
 import com.odsklm.salsabeach.types.ColumnDefs._
 import com.odsklm.salsabeach.types.models.{Row, Value, VersionedRow}
-import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder
+import com.odsklm.salsabeach.types.rowconverters.{RowKeyDecoder, RowQueryEncoder}
 import com.odsklm.salsabeach.types.rowconverters.RowQueryEncoder.ops._
 import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.hbase.client.{Get, Result, Table}
@@ -128,16 +127,16 @@ object GetOps extends LazyLogging {
   /**
     * Get multiple versions for the given columns as a Row.
     *
-    * @param key        The row key
-    * @param columns    A sequence of columns incl. column family
-    * @param versions   The maximum number of versions to return, defaults to all
+    * @param key            The row key
+    * @param columns        A sequence of columns incl. column family
+    * @param versions       The maximum number of versions to return, defaults to all
     * @param minTimestamp   Minimum timestamp to retrieve versions for, inclusive. Default: 0L
     * @param maxTimestamp   Maximum timestamp to retrieve version for, exclusive. Default: Long.MAX_VALUE
-    * @param table      (implicit) The table to read from
-    * @return The values as a Row if the row key exists, otherwise None
+    * @param table          (implicit) The table to read from
+    * @return               The values as a VersionedRow if the row key exists, otherwise None
     */
-  def getVersions[K: RowQueryEncoder](
-      key: K,
+  def getVersions[P: RowQueryEncoder, K: RowKeyDecoder](
+      key: P,
       columns: Seq[FullColumn],
       versions: Int = Int.MaxValue,
       minTimestamp: Option[Instant] = None,
@@ -151,7 +150,7 @@ object GetOps extends LazyLogging {
       maxTimestamp = maxTimestamp,
       versions = versions
     )
-    executeVersioned(key, get, columns)
+    executeVersioned(get, columns)
   }
 
   /**
@@ -232,25 +231,26 @@ object GetOps extends LazyLogging {
     * Executes an HBase Get operation with multiple versions of multiple columns to retrieve and returns a versioned
     * row
     *
-    * @param key      Row key associated with Get. NOTE: this function will not check if `key` corresponds with the key that
-    *                 get was constructed with!
     * @param get      HBase Get operation
     * @param columns  Columns to retrieve, needed for translating HBase Result back to Salsa Beach VersionedRow
     * @param table    (implicit) The HBase table to read from
-    * @tparam K       Type of row key for which `RowQueryEncoder` needs to exist
+    * @tparam K       Type of row key for which `RowKeyDecoder` needs to exist
     * @return         VersionedRow object with columns and corresponding versioned values. If no value exists for
     *                 column, that column and value versions are left out of the result.
     *                 Use `VersionedRow.getLatestValue()` or `VersionedRow.getValueAt()` to safely retrieve a possibly
     *                 non-existent value
     */
-  def executeVersioned[K: RowQueryEncoder](
-      key: K,
+  def executeVersioned[K: RowKeyDecoder](
       get: Get,
       columns: Seq[FullColumn]
     )(implicit table: Table
     ): Option[VersionedRow[K]] = {
     val result = getOptionalResult(get)
-    result.map(convertCellsToColumnsWithVersionedValues(_, columns)).map(VersionedRow(key, _))
+    result.map { r =>
+      val rowKey = implicitly[RowKeyDecoder[K]].decode(r.getRow)
+      val versionedColumns = convertCellsToColumnsWithVersionedValues(r, columns)
+      VersionedRow(rowKey, versionedColumns)
+    }
   }
 
   /**
@@ -294,15 +294,16 @@ object GetOps extends LazyLogging {
     )(implicit table: Table
     ): Option[Row[K]] = {
     val result = getOptionalResult(get)
-    result.map(convertCellsToDynamicColumsWithValues(_, columnFamily, columnFactory)).map(Row(key, _))
+    result
+      .map(convertCellsToDynamicColumsWithValues(_, columnFamily, columnFactory))
+      .map(Row(key, _))
   }
 
   private def getOptionalResult(get: Get)(implicit table: Table): Option[Result] = {
     val result = table.get(get)
-    if(result.getRow == null) {
+    if (result.getRow == null)
       None
-    } else {
+    else
       Some(result)
-    }
   }
 }
